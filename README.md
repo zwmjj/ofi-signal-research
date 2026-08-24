@@ -129,5 +129,6 @@ python src/live_monitor.py      # Real-time monitor (Ctrl+C to stop)
 ## Author
 
 Built as part of quantitative research portfolio. See also:
-- [kuant](https://github.com/zwmjj/kuant) — Multi-strategy systematic trading platform
+- [kuant-core](https://github.com/zwmjj/kuant-core) — Research library: event-driven backtester, factor library, cost and risk toolkit
+- [kuant-strategies](https://github.com/zwmjj/kuant-strategies) — Strategy implementations built on `kuant-core`
 - [alt-data-research](https://github.com/zwmjj/alt-data-research) — Alternative data alpha research
