@@ -71,9 +71,36 @@ def add_ofi_variants(df: pd.DataFrame, windows: list[int] = [5, 10, 20]) -> pd.D
     for sym, grp in df.groupby('symbol'):
         grp = grp.sort_values('timestamp').copy()
 
-        # Normalized OFI (divide by volume, handle zeros)
+        # WARNING -- `ofi_norm` contains no volume information.
+        #
+        #   ofi_raw  = (close - open) / (high - low + eps) * volume
+        #   ofi_norm = ofi_raw / volume
+        #            = (close - open) / (high - low + eps)
+        #
+        # The volume term cancels exactly. `ofi_norm` is the candlestick
+        # body-to-range ratio: a legitimate scale-free microstructure feature,
+        # but NOT an order-flow imbalance, and not what the name says.
+        #
+        # This matters because `ofi_norm` is what signal_analysis and backtest
+        # select as the best variant, so it is the signal behind every headline
+        # number in the README. It is left as-is rather than silently corrected
+        # because the committed results were produced by exactly this line, and
+        # the input data is not committed, so they cannot be regenerated. See
+        # `ofi_vol_scaled` below for the variant this was meant to be.
         vol = grp['volume'] if 'volume' in grp.columns else grp['ofi_raw'].abs()
         grp['ofi_norm'] = grp['ofi_raw'] / (vol.replace(0, np.nan))
+
+        # The intended normalization: scale by TYPICAL volume rather than by
+        # this bar's own volume, so the relative-volume information survives.
+        # A bar with a small body on ten times normal volume should not score
+        # the same as the identical body on normal volume, which is precisely
+        # what `ofi_norm` does.
+        #
+        # NOT EVALUATED. This column is computed but does not appear in any
+        # committed result; adding it to the signal list and re-running is the
+        # obvious next step for this project.
+        typical_vol = vol.rolling(390, min_periods=20).median()
+        grp['ofi_vol_scaled'] = grp['ofi_raw'] / (typical_vol.replace(0, np.nan))
 
         # Rolling OFI
         for w in windows:

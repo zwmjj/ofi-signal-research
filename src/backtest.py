@@ -66,10 +66,32 @@ def run_backtest(df: pd.DataFrame, signal_col: str, price_col: str = 'close',
     n_trades = len(trades_df)
     total_return = (1 + returns).prod() - 1
     avg_return = returns.mean()
-    daily_trades = max(1, n_trades / df['timestamp'].dt.date.nunique())
+    n_days = df['timestamp'].dt.date.nunique()
+    daily_trades = max(1, n_trades / n_days)
+
+    # Simple (uncompounded) annualization. At ~81,000 trades a year and -1.1bp
+    # a trade this produces figures like -884%, which is not a return: a
+    # long/short book cannot lose more than everything, and the same sample's
+    # realized total return is -98.7%. The number is a units artifact of
+    # scaling a per-trade mean by trade frequency with no capital constraint.
+    # It is kept because the committed results were produced with it, and
+    # reported alongside the compounded figure and an explicit flag.
     annualized_return = avg_return * daily_trades * 252
     annualized_vol = returns.std() * np.sqrt(daily_trades * 252)
     sharpe = annualized_return / annualized_vol if annualized_vol > 0 else 0
+
+    # Compounded annualization, which respects the -100% floor.
+    years = n_days / 252 if n_days > 0 else 0.0
+    if years > 0 and total_return > -1.0:
+        annualized_return_compounded = (1.0 + total_return) ** (1.0 / years) - 1.0
+    else:
+        annualized_return_compounded = -1.0
+    annualization_implausible = bool(annualized_return < -1.0)
+
+    # Per-trade Sharpe -- no frequency scaling, so no artifact.
+    per_trade_sharpe = (
+        float(returns.mean() / returns.std()) if returns.std() > 0 else 0.0
+    )
 
     # Drawdown
     cum_ret = (1 + returns).cumprod()
@@ -80,7 +102,18 @@ def run_backtest(df: pd.DataFrame, signal_col: str, price_col: str = 'close',
     win_rate = (returns > 0).mean()
     avg_win = returns[returns > 0].mean() if (returns > 0).any() else 0
     avg_loss = abs(returns[returns < 0].mean()) if (returns < 0).any() else 1e-8
-    profit_factor = avg_win / avg_loss if avg_loss > 0 else float('inf')
+
+    # `payoff_ratio` is avg win / avg loss. This used to be reported as
+    # `profit_factor`, which it is not: profit factor is gross profit divided by
+    # gross loss, so it also needs the win and loss COUNTS. At a 24.6% win rate
+    # the two differ by a factor of three (0.908 vs 0.296 for SPY 1-min), and
+    # the mislabelled version flattered the strategy.
+    payoff_ratio = avg_win / avg_loss if avg_loss > 0 else float('inf')
+    n_win = int((returns > 0).sum())
+    n_loss = int((returns < 0).sum())
+    gross_profit = returns[returns > 0].sum() if n_win else 0.0
+    gross_loss = abs(returns[returns < 0].sum()) if n_loss else 0.0
+    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else float('inf')
 
     long_trades = (trades_df['direction'] == 1).sum()
     short_trades = (trades_df['direction'] == -1).sum()
@@ -95,7 +128,11 @@ def run_backtest(df: pd.DataFrame, signal_col: str, price_col: str = 'close',
         'sharpe': round(sharpe, 3),
         'max_drawdown': round(max_dd * 100, 3),
         'win_rate': round(win_rate * 100, 1),
+        'annualized_return_compounded': round(annualized_return_compounded * 100, 2),
+        'annualization_implausible': annualization_implausible,
+        'per_trade_sharpe': round(per_trade_sharpe, 4),
         'profit_factor': round(profit_factor, 3),
+        'payoff_ratio': round(payoff_ratio, 3),
         'avg_return_bps': round(avg_return * 10000, 3),
         'trades_df': trades_df,
         'cum_returns': cum_ret,
@@ -143,10 +180,17 @@ def run_buy_hold(df: pd.DataFrame) -> dict:
     total_ret = prices.iloc[-1] / prices.iloc[0] - 1
     n_days = df['timestamp'].dt.date.nunique()
     ann_ret = total_ret * (252 / n_days) if n_days > 0 else 0
-    daily_returns = prices.pct_change().dropna()
-    ann_vol = daily_returns.std() * np.sqrt(252 * 390)  # minute returns
+    minute_returns = prices.pct_change().dropna()
+
+    # Annualize the vol using the ACTUAL bars per day, not a hardcoded 390.
+    # This sample includes extended hours -- roughly 774 bars/day, not 390 --
+    # so the old constant understated buy-and-hold vol by sqrt(774/390) ~ 1.41x
+    # and inflated |bh_sharpe| by the same factor, handicapping the benchmark
+    # the strategy is compared against.
+    bars_per_day = len(minute_returns) / n_days if n_days > 0 else 390
+    ann_vol = minute_returns.std() * np.sqrt(252 * bars_per_day)
     sharpe = ann_ret / ann_vol if ann_vol > 0 else 0
-    cum = (1 + daily_returns).cumprod()
+    cum = (1 + minute_returns).cumprod()
     max_dd = (cum / cum.cummax() - 1).min()
     return {
         'total_return': round(total_ret * 100, 2),
