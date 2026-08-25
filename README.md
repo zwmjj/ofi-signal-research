@@ -22,11 +22,28 @@ the note below before the results.
 > `src/backtest.py:207`) and what every table in this README reports. See
 > `src/ofi_calculator.py` for the identity written out.
 >
+> **This is checkable, not just asserted.** `tests/test_ofi_identity.py`
+> verifies it two ways: `ofi_norm` matches `(close − open) / (high − low + ε)`
+> to **1.110e-16**, and multiplying every volume by 1000 moves `ofi_norm` by
+> the same 1.110e-16 — a signal carrying order-flow information cannot be
+> invariant to a thousand-fold change in volume. A third test confirms
+> `ofi_vol_scaled` *does* respond to volume, so the first two cannot pass for
+> a trivial reason. Run `python tests/test_ofi_identity.py`; no data or API
+> key needed.
+>
 > The variants that *do* retain volume — `ofi_roll5/10/20` — are the ones with
 > IC near zero and p > 0.05 across most of `results/summary_stats.csv`. So the
 > honest one-line summary of this repository is: **a candlestick body/range
 > ratio has a small negative IC at minute frequency; the volume-weighted OFI
 > proxies this project set out to test do not.**
+>
+> `src/ofi_calculator.py` also computes `ofi_vol_scaled`, which is what the
+> normalization was meant to be — divide by *typical* (rolling-median) volume
+> rather than the bar's own, so relative-volume information survives. It is
+> **NOT EVALUATED**: it is computed, it appears in no committed result, and no
+> figure in this README depends on it. Adding it to the signal list and
+> re-running is the obvious next step, and is not something this repository has
+> done.
 >
 > This was found on 2026-08-24 during a self-audit and is stated here rather
 > than quietly repaired, because the results below cannot be re-run — the input
@@ -211,6 +228,14 @@ python src/signal_analysis.py   # IC analysis + charts
 python src/backtest.py          # Strategy backtest
 python src/live_monitor.py      # 60-second REST poll (Ctrl+C to stop)
 ```
+
+The one thing here that **does** run offline, with no data and no API key:
+
+```bash
+python tests/test_ofi_identity.py   # or: python -m pytest tests/ -v
+```
+
+It proves the `ofi_norm` cancellation described at the top of this README.
 
 **The committed results cannot be reproduced by running this.** Three reasons,
 all worth stating rather than letting someone discover them:
