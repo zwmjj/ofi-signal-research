@@ -1,6 +1,9 @@
 # Order Flow Imbalance (OFI) Signal Research
 
-Empirical analysis of Order Flow Imbalance as a short-term price predictor for US equities, using minute-level data from Alpaca Markets.
+A study that set out to test Order Flow Imbalance as a short-term price
+predictor for US equities on minute-level Alpaca data, and found that the
+variant it selected as best contains no order-flow information at all. Read
+the note below before the results.
 
 > ## Read this before the results
 >
@@ -31,7 +34,7 @@ Empirical analysis of Order Flow Imbalance as a short-term price predictor for U
 
 ## Key Findings
 
-### Signal has a small, statistically significant negative IC
+### Signal has a small negative IC, with a nominal p-value that is not a significance test
 
 The OFI signal shows a **mean reversion** relationship with future returns — the opposite of the momentum effect typically documented in academic literature:
 
@@ -223,6 +226,16 @@ all worth stating rather than letting someone discover them:
 Pinning explicit dates, seeding the Monte Carlo, and committing the processed
 signal panel would fix all three. Until then, treat `results/` as a record of
 one run rather than as a regenerable artifact.
+
+Because those files predate the audit, two columns in
+`results/backtest_results.csv` no longer mean what the current code would put
+under the same name, and are suffixed `_stale` for that reason —
+`payoff_ratio_stale` (committed as `profit_factor`, but it is avg win / avg
+loss: 0.908 for SPY 1-min where the true profit factor is 0.296) and
+`bh_sharpe_stale` (buy-and-hold vol annualized with a hardcoded 390 bars/day
+instead of the ~774 this sample actually has). See
+[`results/README.md`](results/README.md) for which columns are and are not
+affected. The columns quoted in this README are not affected.
 
 ## References
 
