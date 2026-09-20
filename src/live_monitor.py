@@ -1,4 +1,10 @@
-"""Real-time OFI signal monitor for Alpaca live integration."""
+"""OFI signal monitor -- polls Alpaca's minute-bar REST endpoint once a minute.
+
+This is a poll of a historical-bars endpoint on a 60s loop, not a streaming
+connection: there is no WebSocket here. On Alpaca's free tier the most recent
+15 minutes of SIP data are not returnable, so the loop will error every tick
+until a paid feed is configured.
+"""
 import os
 import sys
 import time
